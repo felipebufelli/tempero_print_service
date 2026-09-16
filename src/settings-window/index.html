@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Tempero Print Service</title>
+  <style>
+    body {
+      font-family: -apple-system, Segoe UI, Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #fdf6ec;
+      color: #3a2a1a;
+    }
+    h1 {
+      font-size: 16px;
+      margin: 0 0 4px;
+    }
+    p.hint {
+      font-size: 12px;
+      color: #7a6a58;
+      margin: 0 0 16px;
+    }
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px;
+      border: 1px solid #d8c9b5;
+      border-radius: 6px;
+      font-family: monospace;
+      margin-bottom: 12px;
+    }
+    .status {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    .status.connected { background: #d7f0da; color: #1f6d2a; }
+    .status.connecting { background: #f5e6c8; color: #8a6a1a; }
+    .status.disconnected { background: #eee; color: #666; }
+    button {
+      background: #e2621b;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:hover { background: #c85516; }
+    button:disabled { background: #d8c9b5; cursor: default; }
+    button.secondary {
+      background: transparent;
+      color: #3a2a1a;
+      border: 1px solid #d8c9b5;
+    }
+    button.secondary:hover { background: #f0e6d6; }
+    .error {
+      display: none;
+      background: #fbe1de;
+      color: #93321f;
+      font-size: 12px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      margin-bottom: 12px;
+    }
+    .error.visible { display: block; }
+    .row { display: flex; gap: 8px; }
+    .advanced-toggle {
+      background: none;
+      border: none;
+      color: #7a6a58;
+      font-size: 11px;
+      text-decoration: underline;
+      padding: 0;
+      margin: 4px 0 12px;
+    }
+    .advanced-toggle:hover { background: none; color: #3a2a1a; }
+    #advanced { display: none; }
+    #advanced.visible { display: block; }
+    .section {
+      border-top: 1px solid #e8dcc8;
+      padding-top: 14px;
+      margin-top: 4px;
+    }
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+    .section-header span {
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .scan-status {
+      font-size: 11px;
+      color: #7a6a58;
+      margin-bottom: 8px;
+      min-height: 14px;
+    }
+    .scan-results {
+      max-height: 140px;
+      overflow-y: auto;
+      border: 1px solid #e8dcc8;
+      border-radius: 6px;
+    }
+    .scan-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 10px;
+      border-bottom: 1px solid #f0e6d6;
+      font-size: 12px;
+    }
+    .scan-row:last-child { border-bottom: none; }
+    .scan-row .mono { font-family: monospace; }
+    .scan-row button {
+      padding: 3px 10px;
+      font-size: 11px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Configuração do agente</h1>
+  <p class="hint">Cole aqui o código de pareamento gerado na tela Impressoras do Temperô, dentro da unidade que essa impressora atende.</p>
+
+  <div>
+    <span id="status" class="status disconnected">Não conectado</span>
+  </div>
+
+  <div id="error" class="error"></div>
+
+  <label for="token">Código de pareamento</label>
+  <input id="token" type="text" placeholder="Cole o código aqui" />
+  <button id="save">Salvar</button>
+
+  <div class="section">
+    <div class="section-header">
+      <span>Impressoras encontradas na rede</span>
+      <button id="scan" class="secondary">Buscar</button>
+    </div>
+    <p class="hint">Procura na rede local por equipamentos respondendo na porta 9100 (padrão de impressora térmica). Pode levar alguns segundos.</p>
+    <div id="scanStatus" class="scan-status"></div>
+    <div id="scanResults" class="scan-results"></div>
+  </div>
+
+  <button id="advancedToggle" class="advanced-toggle">Configuração avançada</button>
+  <div id="advanced">
+    <label for="backendUrl">Endereço do backend</label>
+    <div class="row">
+      <input id="backendUrl" type="text" />
+      <button id="saveUrl" class="secondary">Salvar endereço</button>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

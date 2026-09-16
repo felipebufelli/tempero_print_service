@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "None",
+    "lib": ["ES2022", "DOM"],
+    "outDir": "../../dist/settings-window",
+    "strict": true,
+    "skipLibCheck": true
+  },
+  "include": ["renderer.ts"]
+}

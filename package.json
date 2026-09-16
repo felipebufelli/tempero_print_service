@@ -1,0 +1,45 @@
+{
+  "name": "tempero-print-service",
+  "version": "0.1.0",
+  "description": "Agente local de impressão do Temperô — fica na rede do restaurante e repassa cupons pras impressoras térmicas.",
+  "author": "Temperô",
+  "private": true,
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && tsc -p src/settings-window/tsconfig.json && node -e \"require('fs').cpSync('src/settings-window/index.html','dist/settings-window/index.html')\"",
+    "start": "npm run build && electron .",
+    "dist": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "electron-store": "^8.2.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.16.5",
+    "@types/ws": "^8.18.1",
+    "electron": "^32.0.0",
+    "electron-builder": "^25.0.0",
+    "electron-updater": "^6.3.0",
+    "typescript": "^5.8.3"
+  },
+  "build": {
+    "appId": "com.tempero.printservice",
+    "productName": "Tempero Print Service",
+    "directories": {
+      "output": "release"
+    },
+    "files": ["dist/**/*", "assets/**/*"],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": false
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "felipebufelli",
+      "repo": "tempero_print_service"
+    }
+  }
+}
