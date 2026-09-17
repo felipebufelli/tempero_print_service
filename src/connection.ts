@@ -10,7 +10,17 @@ import { getConfig } from "./config";
 // Empacotado em assets/ (ver package.json → build.files) — mesmo padrão do
 // ICON_PATH em main.ts: __dirname aqui é dist/, então "../assets" é a pasta
 // assets/ na raiz do projeto tanto em dev quanto no app instalado.
-const PRINT_SCRIPT_PATH = path.join(__dirname, "..", "assets", "print-raw.ps1");
+//
+// O .replace() é necessário porque o electron-builder empacota tudo dentro
+// de um app.asar (um arquivo só, que o Node/Electron sabe ler de forma
+// transparente) — mas quem abre esse script é o powershell.exe, um processo
+// externo que não entende asar, então o caminho de dentro dele "não existe"
+// pra ele. `asarUnpack` no package.json (build.asarUnpack) copia esse
+// arquivo específico pra fora, numa pasta app.asar.unpacked ao lado do
+// app.asar, e é esse o caminho que precisa ser usado aqui. Em dev (sem
+// asar nenhum) __dirname nunca contém "app.asar", então o replace vira
+// no-op e o caminho original é usado normalmente.
+const PRINT_SCRIPT_PATH = path.join(__dirname, "..", "assets", "print-raw.ps1").replace("app.asar", "app.asar.unpacked");
 
 export type ConnectionState = "disconnected" | "connecting" | "connected";
 

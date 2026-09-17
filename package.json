@@ -29,6 +29,7 @@
       "output": "release"
     },
     "files": ["dist/**/*", "assets/**/*"],
+    "asarUnpack": ["assets/print-raw.ps1"],
     "win": {
       "target": "nsis"
     },
