@@ -4,6 +4,8 @@ Agente local de impressão do Temperô. Fica rodando dentro da rede do restauran
 
 O backend nunca conecta nele — é o agente que liga pro backend e deixa a conexão aberta; o backend só escreve nessa conexão já existente quando tem um trabalho de impressão. Ver `tempero_api/src/ws/printAgentServer.ts` e `services/printAgentRegistry.ts` no repositório da API pro lado de lá.
 
+Cada impressora cadastrada na tela **Impressoras** do Temperô é de rede (IP:porta, o agente abre TCP direto) ou USB (plugada nesse PC, identificada pelo nome com que o Windows já a enxerga). Impressora USB é resolvida pelo script `assets/print-raw.ps1`, que fala direto com a API de impressão do Windows (`winspool.drv`, via P/Invoke em PowerShell) e manda o buffer como dado `RAW` — de propósito em vez de um módulo nativo (tipo `printer`/node-gyp): PowerShell já vem em qualquer Windows, então não depende de Visual Studio Build Tools nem pra compilar nem pra instalar. O seletor de impressora USB na tela do painel pergunta pro agente conectado quais impressoras o Windows dele tem instaladas (mensagem `list-printers` no mesmo WebSocket, respondida via `Get-CimInstance Win32_Printer`) — não precisa digitar nome de cabeça.
+
 ## Como rodar em desenvolvimento
 
 ```bash
