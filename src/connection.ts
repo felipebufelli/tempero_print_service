@@ -1,10 +1,25 @@
 import net from "node:net";
+import os from "node:os";
+import path from "node:path";
+import fs from "node:fs";
+import crypto from "node:crypto";
+import { spawn, execFile } from "node:child_process";
 import WebSocket from "ws";
 import { getConfig } from "./config";
 
+// Empacotado em assets/ (ver package.json → build.files) — mesmo padrão do
+// ICON_PATH em main.ts: __dirname aqui é dist/, então "../assets" é a pasta
+// assets/ na raiz do projeto tanto em dev quanto no app instalado.
+const PRINT_SCRIPT_PATH = path.join(__dirname, "..", "assets", "print-raw.ps1");
+
 export type ConnectionState = "disconnected" | "connecting" | "connected";
 
-type PrintJob = { type: "print"; jobId: string; ip: string; port: number; buffer: string };
+// Rede é resolvida abrindo TCP direto pro IP:porta; USB é a impressora
+// instalada localmente no Windows, identificada pelo nome com que o SO a
+// enxerga — não passa IP nenhum porque não tem.
+type PrintTarget = { kind: "network"; ip: string; port: number } | { kind: "usb"; printerName: string };
+type PrintJob = { type: "print"; jobId: string; buffer: string; target: PrintTarget };
+type ListPrintersRequest = { type: "list-printers"; requestId: string };
 
 const RECONNECT_MIN_MS = 2000;
 const RECONNECT_MAX_MS = 30000;
@@ -82,13 +97,14 @@ function connect(): void {
   });
 
   ws.on("message", (raw) => {
-    let msg: PrintJob;
+    let msg: PrintJob | ListPrintersRequest;
     try {
       msg = JSON.parse(raw.toString());
     } catch {
       return;
     }
     if (msg.type === "print") handlePrintJob(msg);
+    else if (msg.type === "list-printers") handleListPrinters(msg.requestId);
   });
 
   ws.on("close", (code) => {
@@ -111,15 +127,24 @@ function scheduleReconnect(): void {
   }, reconnectDelay);
 }
 
-// Repassa o buffer recebido do backend pro IP:porta local da impressora —
-// essa é a parte que só funciona porque o agente está na mesma rede dela.
+// Repassa o buffer recebido do backend pro destino certo — TCP local pro
+// IP:porta (rede) ou spooler do Windows pelo nome da impressora (USB). Rede
+// só funciona porque o agente está na mesma rede dela; USB só funciona
+// porque a impressora está fisicamente plugada nesse PC.
 function handlePrintJob(job: PrintJob): void {
-  const buffer = Buffer.from(job.buffer, "base64");
-  const socket = net.createConnection({ host: job.ip, port: job.port, timeout: PRINT_SOCKET_TIMEOUT_MS });
-
   const sendResult = (ok: boolean, error?: string) => {
     ws?.send(JSON.stringify({ type: "result", jobId: job.jobId, ok, error }));
   };
+
+  if (job.target.kind === "usb") {
+    printToUsb(job.target.printerName, Buffer.from(job.buffer, "base64"), sendResult);
+  } else {
+    printToNetwork(job.target.ip, job.target.port, Buffer.from(job.buffer, "base64"), sendResult);
+  }
+}
+
+function printToNetwork(ip: string, port: number, buffer: Buffer, sendResult: (ok: boolean, error?: string) => void): void {
+  const socket = net.createConnection({ host: ip, port, timeout: PRINT_SOCKET_TIMEOUT_MS });
 
   socket.on("connect", () => socket.end(buffer));
   socket.on("close", (hadError) => {
@@ -130,4 +155,74 @@ function handlePrintJob(job: PrintJob): void {
     sendResult(false, "Tempo esgotado ao conectar na impressora");
   });
   socket.on("error", (err) => sendResult(false, err.message));
+}
+
+// Manda os bytes pro spooler do Windows via um script PowerShell que fala
+// direto com winspool.drv (assets/print-raw.ps1) — de propósito, em vez de
+// um módulo nativo tipo "printer"/node-gyp: PowerShell já vem em qualquer
+// Windows, então nem quem desenvolve nem quem instala o agente no
+// restaurante precisa de Visual Studio Build Tools só por causa disso. O
+// buffer vai por arquivo temporário (não por stdin/argv) pra não correr
+// risco de corromper bytes binários na travessia do processo.
+function printToUsb(printerName: string, buffer: Buffer, sendResult: (ok: boolean, error?: string) => void): void {
+  const tempFile = path.join(os.tmpdir(), `tempero-print-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.bin`);
+
+  fs.writeFile(tempFile, buffer, (writeErr) => {
+    if (writeErr) {
+      sendResult(false, `Não foi possível preparar o arquivo de impressão: ${writeErr.message}`);
+      return;
+    }
+
+    const cleanup = () => fs.unlink(tempFile, () => {});
+    const ps = spawn(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        PRINT_SCRIPT_PATH,
+        "-PrinterName",
+        printerName,
+        "-FilePath",
+        tempFile,
+      ],
+      { windowsHide: true }
+    );
+
+    let stderr = "";
+    ps.stderr.on("data", (chunk) => (stderr += chunk.toString()));
+    ps.on("error", (err) => {
+      cleanup();
+      sendResult(false, `Não foi possível executar o PowerShell: ${err.message}`);
+    });
+    ps.on("close", (code) => {
+      cleanup();
+      if (code === 0) sendResult(true);
+      else sendResult(false, stderr.trim() || `PowerShell saiu com código ${code}`);
+    });
+  });
+}
+
+// Responde ao backend com as impressoras que o Windows desse PC enxerga —
+// usado pra popular o seletor de impressora USB na tela Impressoras, sem o
+// operador ter que digitar o nome exato de cabeça. Win32_Printer via CIM
+// (em vez do cmdlet Get-Printer) porque é a API mais antiga/universal —
+// disponível mesmo em instalações mais enxutas do Windows.
+function handleListPrinters(requestId: string): void {
+  execFile(
+    "powershell.exe",
+    ["-NoProfile", "-NonInteractive", "-Command", "Get-CimInstance -ClassName Win32_Printer | Select-Object -ExpandProperty Name"],
+    { windowsHide: true },
+    (err, stdout) => {
+      const names = err
+        ? []
+        : stdout
+            .split(/\r?\n/)
+            .map((s) => s.trim())
+            .filter(Boolean);
+      ws?.send(JSON.stringify({ type: "printers-list", requestId, printers: names }));
+    }
+  );
 }
