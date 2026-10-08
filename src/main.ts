@@ -3,6 +3,7 @@ import { app, BrowserWindow, Menu, Tray, ipcMain } from "electron";
 import { getConfig, setToken, setBackendUrl } from "./config";
 import { start as startConnection, reconnectNow, setStateListener, setErrorListener, type ConnectionState } from "./connection";
 import { scanForPrinters } from "./networkScan";
+import { stopAllScales } from "./scales";
 
 let tray: Tray | null = null;
 let settingsWindow: BrowserWindow | null = null;
@@ -80,6 +81,11 @@ app.whenReady().then(() => {
   // pra não deixar o operador procurando o ícone da bandeja sem saber o que fazer.
   if (!getConfig().token) openSettingsWindow();
 });
+
+// Fecha os leitores de balança (processos PowerShell segurando portas COM)
+// antes de sair — o próprio script também se encerra se o agente sumir, mas
+// assim a porta é liberada na hora.
+app.on("before-quit", () => stopAllScales());
 
 // Sem listener em "window-all-closed" de propósito: por padrão o Electron só
 // encerra o processo se algo chamar app.quit() — como só fazemos isso no
