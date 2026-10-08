@@ -1,7 +1,7 @@
 {
   "name": "tempero-print-service",
-  "version": "0.1.0",
-  "description": "Agente local de impressão do Temperô — fica na rede do restaurante e repassa cupons pras impressoras térmicas.",
+  "version": "0.2.0",
+  "description": "Agente local de impressão do Temperô — fica na rede do restaurante, repassa cupons pras impressoras térmicas e lê balanças digitais.",
   "author": "Temperô",
   "private": true,
   "main": "dist/main.js",
@@ -28,8 +28,14 @@
     "directories": {
       "output": "release"
     },
-    "files": ["dist/**/*", "assets/**/*"],
-    "asarUnpack": ["assets/print-raw.ps1"],
+    "files": [
+      "dist/**/*",
+      "assets/**/*"
+    ],
+    "asarUnpack": [
+      "assets/print-raw.ps1",
+      "assets/scale-serial.ps1"
+    ],
     "win": {
       "target": "nsis"
     },

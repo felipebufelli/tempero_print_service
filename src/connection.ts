@@ -6,6 +6,7 @@ import crypto from "node:crypto";
 import { spawn, execFile } from "node:child_process";
 import WebSocket from "ws";
 import { getConfig } from "./config";
+import { applyScalesConfig, listSerialPorts, readScale, setWeightListener, type ScaleConfig } from "./scales";
 
 // Empacotado em assets/ (ver package.json → build.files) — mesmo padrão do
 // ICON_PATH em main.ts: __dirname aqui é dist/, então "../assets" é a pasta
@@ -30,6 +31,10 @@ export type ConnectionState = "disconnected" | "connecting" | "connected";
 type PrintTarget = { kind: "network"; ip: string; port: number } | { kind: "usb"; printerName: string };
 type PrintJob = { type: "print"; jobId: string; buffer: string; target: PrintTarget };
 type ListPrintersRequest = { type: "list-printers"; requestId: string };
+type ScalesConfigMessage = { type: "scales-config"; scales: ScaleConfig[] };
+type ListSerialPortsRequest = { type: "list-serial-ports"; requestId: string };
+type ReadScaleRequest = { type: "read-scale"; requestId: string; scaleId: string };
+type BackendMessage = PrintJob | ListPrintersRequest | ScalesConfigMessage | ListSerialPortsRequest | ReadScaleRequest;
 
 const RECONNECT_MIN_MS = 2000;
 const RECONNECT_MAX_MS = 30000;
@@ -41,6 +46,20 @@ let reconnectTimer: NodeJS.Timeout | null = null;
 let manuallyStopped = false;
 let onStateChange: (state: ConnectionState) => void = () => {};
 let onConnectionError: (message: string) => void = () => {};
+
+// Pesagens que estabilizaram enquanto o WebSocket estava fora (queda de
+// internet) — vão pro backend assim que reconectar, em vez de o prato do
+// cliente sumir sem comanda. Limitado pra não acumular sem fim.
+const MAX_PENDING_WEIGHTS = 50;
+let pendingWeights: { scaleId: string; grams: number }[] = [];
+
+setWeightListener((scaleId, grams) => {
+  if (ws?.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: "scale-weight", scaleId, grams }));
+  } else {
+    pendingWeights = [...pendingWeights, { scaleId, grams }].slice(-MAX_PENDING_WEIGHTS);
+  }
+});
 
 export function setStateListener(listener: (state: ConnectionState) => void): void {
   onStateChange = listener;
@@ -104,10 +123,12 @@ function connect(): void {
   ws.on("open", () => {
     reconnectDelay = RECONNECT_MIN_MS;
     onStateChange("connected");
+    for (const w of pendingWeights) ws?.send(JSON.stringify({ type: "scale-weight", ...w }));
+    pendingWeights = [];
   });
 
   ws.on("message", (raw) => {
-    let msg: PrintJob | ListPrintersRequest;
+    let msg: BackendMessage;
     try {
       msg = JSON.parse(raw.toString());
     } catch {
@@ -115,6 +136,13 @@ function connect(): void {
     }
     if (msg.type === "print") handlePrintJob(msg);
     else if (msg.type === "list-printers") handleListPrinters(msg.requestId);
+    else if (msg.type === "scales-config") applyScalesConfig(Array.isArray(msg.scales) ? msg.scales : []);
+    else if (msg.type === "list-serial-ports") {
+      const { requestId } = msg;
+      listSerialPorts((ports) => ws?.send(JSON.stringify({ type: "serial-ports-list", requestId, ports })));
+    } else if (msg.type === "read-scale") {
+      ws?.send(JSON.stringify({ type: "scale-reading", requestId: msg.requestId, ...readScale(msg.scaleId) }));
+    }
   });
 
   ws.on("close", (code) => {
